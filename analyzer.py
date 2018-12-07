@@ -1,6 +1,9 @@
 import requests
 import math
+import json
 from tabulate import tabulate
+
+SETS = json.loads(open('sets.json').read())['sets']
 
 r = requests.get("https://rsbuddy.com/exchange/summary.json")
 
@@ -29,6 +32,36 @@ for i in range(0, len(items), BATCH_SIZE):
         if not uuid in prices:
             continue
         item['ge_price'] = prices[uuid]
+
+# Now tabulate set transforms
+def find_item(name):
+    for uuid, item in items:
+        if item['name'] == name:
+            return item
+
+def average_price(item):
+    sell = item['sell_average']
+    buy = item['buy_average']
+    return (buy + sell) / 2
+
+set_list = []
+for item_set in SETS:
+    product = find_item(item_set[0])
+    rest = [find_item(item) for item in item_set[1:]]
+
+    total_price = product['ge_price']
+    rest_prices = [item['ge_price'] for item in rest]
+    rest_price = sum(rest_prices)
+
+    rest_names = [item['name'] for item in rest]
+
+    coin_margin = total_price - rest_price
+    percent_margin = 0 if total_price == 0 or rest_price == 0 else coin_margin / rest_price
+    percent_margin *= 100 # For percentage
+
+    score = percent_margin
+
+    set_list.append((product, total_price, rest_price, percent_margin, score, rest_names))
 
 for uuid, item in items:
     sell = item['sell_average']
@@ -100,3 +133,26 @@ headers = [
 
 print(tabulate(items, headers=headers))
 
+set_list = sorted(set_list, key=lambda a: a[4])
+set_list = reversed(set_list)
+
+set_list = [
+    [
+        item_set[0]["name"],
+        item_set[1],
+        item_set[2],
+        item_set[3],
+        item_set[5],
+    ]
+    for item_set in set_list
+]
+
+headers = [
+    'Name',
+    'Total',
+    'Ingredients',
+    '% Margin',
+    'Rest',
+]
+
+print(tabulate(set_list, headers=headers))
